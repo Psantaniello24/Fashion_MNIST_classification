@@ -1,0 +1,268 @@
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.ndimage as ndimage
+from PIL import Image
+from tensorflow.keras import models, layers, datasets, optimizers
+from keras.preprocessing.image import img_to_array, array_to_img
+from keras.models import Model
+from keras import callbacks
+from keras.layers.advanced_activations import LeakyReLU
+from keras.utils import to_categorical
+from tensorflow.keras.layers import  Conv2D, BatchNormalization, Add, Activation, MaxPooling2D, Dropout, Flatten, Dense
+from tensorflow.keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
+from numpy import expand_dims
+#import dataset 
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
+#x_train, x_test = x_train / 255.0, x_test / 255.0
+#x_train = x_train.reshape(x_train.shape[0], 28, 28, 1)
+#x_test = x_test.reshape(x_test.shape[0], 28, 28, 1)
+x_train.shape,x_test.shape 
+#show some images in the dataset
+print("x_train shape:", x_train.shape, "y_train shape:", y_train.shape)
+class_names = ["top", "trouser", "pullover", "dress", "coat",
+	      "sandal", "shirt", "sneaker", "bag", "ankle boot"]
+
+plt.figure(figsize=(10,10))
+for i in range(25):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(x_train[i], cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_train[i]])
+plt.show()
+plt.figure(figsize=(10,10))
+for i in range(25):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(x_test[1], cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_test[i]])
+plt.show()
+#define some data augmentation functions
+def random_rotate_image(image):
+  image = ndimage.rotate(image, np.random.uniform(-50, 50), reshape=False)
+  return image
+plt.figure(figsize=(10,10))
+for i in range(25):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(random_rotate_image(x_train[i]), cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_train[i]])
+plt.show()
+def tf_random_rotate_image(image, label):
+  im_shape = image.shape
+  [image,] = tf.py_function(random_rotate_image, [image], [tf.float32])
+  image.set_shape(im_shape)
+  return image, label
+def blurred_image(image):
+  image = ndimage.gaussian_filter(image, 2)
+  return image
+plt.figure(figsize=(10,10))
+for i in range(25):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(blurred_image(x_train[i]), cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_train[i]])
+plt.show()
+def tf_blurred_image(image, label):
+  im_shape = image.shape
+  [image,] = tf.py_function(blurred_image, [image], [tf.float32])
+  image.set_shape(im_shape)
+  return image, label
+  #Adding Poisson noise ->Distribution generated from the data -> Descrrete probability distribution
+x_train = x_train.reshape(x_train.shape[0], 28, 28)
+def noise_image(image):
+  x = len(np.unique(image))
+  x = 2 ** np.ceil(np.log2(x))
+  noisy = np.random.poisson(image * x) / float(x)
+  return noisy
+plt.figure(figsize=(30,30))
+for i in range(5):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(noise_image(x_train[i]), cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_train[i]])
+plt.show()
+def tf_noise_image(image, label):
+  im_shape = image.shape
+  [image,] = tf.py_function(noise_image, [image], [tf.float32])
+  image.set_shape(im_shape)
+  return image, label
+  def flip_image(image):
+  img=np.array(image)
+  x=np.flip(img,(0,1))
+  return x
+
+for i in range(25):
+    plt.subplot(5,5,i+1)
+    plt.xticks([])
+    plt.yticks([])
+    plt.grid(False)
+    plt.imshow(flip_image(x_train[i]), cmap=plt.cm.binary)
+    # The CIFAR labels happen to be arrays, 
+    # which is why you need the extra index
+    plt.xlabel(class_names[y_train[i]])
+plt.show()
+def tf_flip_image(image, label):
+  im_shape = image.shape
+  [image,] = tf.py_function(flip_image, [image], [tf.float32])
+  image.set_shape(im_shape)
+  return image, label
+#processing images to make them RGB-like
+#x_train = x_train.reshape(60000, 784)
+#x_test= x_test.reshape (10000, 784)
+x_train.shape,x_test.shape 
+#Stack arrays in sequence depth wise (along third axis).
+x_train=np.dstack([x_train] * 3)
+x_test=np.dstack([x_test]*3)
+x_train.shape,x_test.shape 
+#x_train = np.asarray([img_to_array(array_to_img(im, scale=False).resize((48,48))) for im in x_train])
+#x_test = np.asarray([img_to_array(array_to_img(im, scale=False).resize((48,48))) for im in x_test])
+#x_train.shape, x_test.shape
+x_train = x_train.reshape(-1, 28,28,3)
+x_test= x_test.reshape(-1, 28,28,3)
+x_train.shape,x_test.shape 
+# Resize the images 48*48 as required by VGG16
+x_train = np.asarray([img_to_array(array_to_img(im, scale=False).resize((48,48))) for im in x_train])
+x_test = np.asarray([img_to_array(array_to_img(im, scale=False).resize((48,48))) for im in x_test])
+x_train.shape, x_test.shape
+#Normalize data and change the type 
+x_train = x_train / 255.
+x_test = x_test / 255.
+x_train = x_train.astype('float32')
+x_test = x_test.astype('float32')
+x_train.shape, x_test.shape
+#extract features using VGG16 model
+def VGG16():
+  return tf.keras.applications.VGG16(include_top=False,input_shape=(48,48,3))#exclde fully connected layers 
+vgg=VGG16()
+vgg.summary()
+#ex. how to apply data augmentation
+rotated_data=np.empty_like(x_train)
+for i in range(60000):
+  rotated_data[i]=random_rotate_image(x_train[i])
+#extract features 
+train_features = vgg.predict(np.array(x_train), batch_size=64, verbose=1)
+validation_features = vgg.predict(np.array(x_test), batch_size=64, verbose=1)
+test_features = vgg.predict(np.array(x_test), batch_size=64, verbose=1)#no data augm on test set 
+#flatten features
+#now we have to flatten features before giving them to classifier
+train_features_flat = np.reshape(train_features, (60000, 1*1*512))
+validation_features_flat = np.reshape(validation_features, (10000, 1*1*512))
+test_features_flat = np.reshape(test_features, (10000, 1*1*512))
+#define the classifier 
+#define the classifier for fine tuning the model :
+NB_TRAIN_SAMPLES = train_features_flat.shape[0]
+NB_EPOCHS = 100
+num_classes=10
+#classifier with leaky relu 
+classifier = models.Sequential()
+classifier.add(layers.Dense(512, activation=tf.keras.layers.LeakyReLU(), input_dim=(1*1*512)))
+classifier.add(layers.Dense(num_classes, activation='softmax'))
+#compile the model
+classifier.compile(
+    loss='categorical_crossentropy',
+    optimizer=optimizers.Adam(),
+    metrics=['acc'])
+#useful callbacks
+
+reduce_learning = callbacks.ReduceLROnPlateau(
+    monitor='val_loss',
+    factor=0.2,
+    patience=2,
+    verbose=1,
+    mode='auto',
+    min_delta=0.0001,
+    cooldown=2,
+    min_lr=0)
+
+eary_stopping = callbacks.EarlyStopping(
+    monitor='val_loss',
+    min_delta=0,
+    patience=7,
+    verbose=1,
+    mode='auto')
+callbacks_x = [reduce_learning, eary_stopping]
+#callbacks = [reduce_learning]
+#conversion of labels since we are using categorical cross-entropy function
+train_Y_one_hot = to_categorical(y_train)
+val_Y_one_hot=to_categorical(y_test)
+test_Y_one_hot = to_categorical(y_test)
+#train the classifier 
+history = classifier.fit(
+    train_features_flat,
+    train_Y_one_hot,
+    epochs=NB_EPOCHS,
+    validation_data=(validation_features_flat,val_Y_one_hot),
+    callbacks=callbacks_x
+)
+test_loss, test_acc = classifier.evaluate(test_features_flat,test_Y_one_hot, verbose=2)
+#test the classifier
+prediction = classifier.predict(test_features_flat)
+test_loss=np.argmax(prediction)
+print(class_names[test_loss])
+#show feature maps at each level
+#trying to print activation maps of filters
+filters, biases = vgg.layers[1].get_weights()
+# normalize filter values to 0-1 so we can visualize them
+f_min, f_max = filters.min(), filters.max()
+filters = (filters - f_min) / (f_max - f_min)
+# plot first few filters
+n_filters, ix = 6, 1
+for i in range(n_filters):
+	# get the filter
+	f = filters[:, :, :, i]
+	# plot each channel separately
+	for j in range(3):
+		# specify subplot and turn of axis
+		ax = plt.subplot(n_filters, 3, ix)
+		ax.set_xticks([])
+		ax.set_yticks([])
+		# plot filter channel in grayscale
+		plt.imshow(f[:, :,j], cmap='gray')
+		ix += 1
+# show the figure
+plt.show()
+#show graphics
+acc = history.history['acc']
+val_acc = history.history['val_acc']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+epochs = range(1, len(acc) + 1)
+
+plt.title('Training and validation accuracy')
+plt.plot(epochs, acc, 'red', label='Training acc')
+plt.plot(epochs, val_acc, 'blue', label='Validation acc')
+plt.legend()
+
+plt.figure()
+plt.title('Training and validation loss')
+plt.plot(epochs, loss, 'red', label='Training loss')
+plt.plot(epochs, val_loss, 'blue', label='Validation loss')
+
+plt.legend()
+
+plt.show()
+
+
+
+
